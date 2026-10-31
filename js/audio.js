@@ -66,7 +66,7 @@ export class AudioEngine {
     return b;
   }
 
-  async load(base, onProgress) {
+  async load(base, version, onProgress) {
     const get = async (url, tries = 4) => {
       for (let i = 0; ; i++) {
         try {
@@ -79,14 +79,14 @@ export class AudioEngine {
         }
       }
     };
-    this.lines = await (await get(`${base}/lines.json`)).json();
+    this.lines = await (await get(`${base}/lines.json?v=${version}`)).json();
     const ids = Object.keys(this.lines);
     let done = 0, next = 0;
     // a few downloads at a time, each retried, so a weak connection never drops a line
     const worker = async () => {
       while (next < ids.length) {
         const id = ids[next++];
-        const data = await (await get(`${base}/${id}.mp3`)).arrayBuffer();
+        const data = await (await get(`${base}/${id}.mp3?v=${version}`)).arrayBuffer();
         this.buffers[id] = await new Promise((res, rej) => this.ctx.decodeAudioData(data, res, rej));
         done++;
         onProgress && onProgress(done / ids.length);

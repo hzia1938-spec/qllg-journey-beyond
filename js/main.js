@@ -502,7 +502,8 @@ function begin() {
 }
 
 async function boot() {
-  await loadBody('./assets/body.bin');
+  const V = window.JB_BUILD || '0';
+  await loadBody(`./assets/body.bin?v=${V}`);
   if (SHOT) {
     document.getElementById('title').classList.add('hidden');
     fade.material.opacity = 0;
@@ -530,7 +531,7 @@ async function boot() {
     navigator.xr.isSessionSupported('immersive-vr').then((ok) => { btnVR.hidden = !ok; }).catch(() => {});
   }
   try {
-    await audio.load('./audio', (p) => { progressEl.textContent = `Preparing the journey… ${Math.round(p * 100)}%`; });
+    await audio.load('./audio', V, (p) => { progressEl.textContent = `Preparing the journey… ${Math.round(p * 100)}%`; });
   } catch (e) {
     console.error(e);
   }
