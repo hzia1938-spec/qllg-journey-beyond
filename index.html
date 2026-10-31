@@ -41,7 +41,8 @@
   .primary { background: var(--gold); color: #1a1205; box-shadow: 0 0 28px rgba(255, 204, 77, .35); }
   .ghost { background: rgba(255, 255, 255, .1); color: #fff; outline: 2px solid rgba(255, 255, 255, .35); }
   button:disabled { opacity: .45; cursor: default; }
-  .tips { margin-top: 26px; font-size: 14px; color: rgba(236, 240, 250, .66); line-height: 1.7; max-width: 32em; }
+  .tips { margin-top: 26px; font-size: 14px; color: rgba(236, 240, 250, .78); line-height: 1.7; max-width: 32em;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .95), 0 0 2px rgba(0, 0, 0, .9); }
   .tips b { color: rgba(255, 255, 255, .9); font-weight: 700; }
   #progress { margin-top: 18px; font-size: 13px; color: rgba(236, 240, 250, .55); min-height: 1.2em; }
 
@@ -58,18 +59,31 @@
   #found i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .35); }
   #found i.lit { border-color: transparent; background: currentColor; box-shadow: 0 0 12px 3px currentColor; }
   .end h1 { font-size: clamp(34px, 8vw, 60px); }
+  #title { background: radial-gradient(ellipse at 50% 30%, rgba(5, 7, 15, .66), rgba(5, 7, 15, .32) 55%, rgba(5, 7, 15, .12) 80%); }
+  #found[hidden], .hud-btn[hidden] { display: none; }
+  .hud-btn { position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 14px; z-index: 8; width: 46px; height: 46px;
+    min-width: 0; padding: 0; border-radius: 50%; background: rgba(10, 16, 34, .55); outline: 1.5px solid rgba(255, 255, 255, .35);
+    display: grid; place-items: center; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .hud-btn svg { width: 20px; height: 20px; fill: #fff; }
+  .hud-btn .i-play, .hud-btn.is-paused .i-pause { display: none; }
+  .hud-btn.is-paused .i-play { display: block; }
+  .screen.paused { background: rgba(4, 7, 18, .72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); z-index: 9; }
+  #word { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%) scale(1.14); white-space: nowrap;
+    font-size: clamp(34px, 10.5vw, 92px); font-weight: 700; letter-spacing: .2em; padding-left: .2em; opacity: 0;
+    transition: opacity .7s ease, transform 1.6s cubic-bezier(.2, .8, .2, 1); pointer-events: none; z-index: 5; }
+  #word.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   .end .url { font-size: clamp(26px, 7vw, 44px); color: var(--gold); font-weight: 700; margin: 6px 0 22px; letter-spacing: .02em; }
 </style>
 <!-- BUILD: bump this number (all four places below) on every publish so browsers fetch fresh files -->
-<script>window.JB_BUILD = '3';</script>
+<script>window.JB_BUILD = '4';</script>
 <script type="importmap">
   { "imports": {
       "three": "./lib/three.module.js",
-      "./js/audio.js": "./js/audio.js?v=3",
-      "./js/body.js": "./js/body.js?v=3",
-      "./js/gfx.js": "./js/gfx.js?v=3",
-      "./js/orb.js": "./js/orb.js?v=3",
-      "./js/worlds.js": "./js/worlds.js?v=3"
+      "./js/audio.js": "./js/audio.js?v=4",
+      "./js/body.js": "./js/body.js?v=4",
+      "./js/gfx.js": "./js/gfx.js?v=4",
+      "./js/orb.js": "./js/orb.js?v=4",
+      "./js/worlds.js": "./js/worlds.js?v=4"
   } }
 </script>
 </head>
@@ -105,10 +119,23 @@
   <div class="buttons"><button id="btn-again" class="ghost">Journey again</button></div>
 </section>
 
+<section id="paused" class="screen paused hidden">
+  <div class="kicker">Journey Beyond</div>
+  <h1>Paused</h1>
+  <p class="sub">Take your time. The lights will wait for you.</p>
+  <div class="buttons"><button id="btn-resume" class="primary">Resume</button><button id="btn-restart" class="ghost">Start over</button></div>
+  <div class="tips">Press <b>Space</b> to pause or resume. In VR, squeeze a controller's grip button.</div>
+</section>
+
+<button id="btn-pause" class="hud-btn" aria-label="Pause" hidden>
+  <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>
+</button>
+<div id="word"></div>
 <div id="hint"></div>
 <div id="found" hidden><i style="color:#ffd35c"></i><i style="color:#5cffa0"></i><i style="color:#ff7aa8"></i><i style="color:#b98cff"></i></div>
 <div id="caption"></div>
 
-<script type="module" src="./js/main.js?v=3"></script>
+<script type="module" src="./js/main.js?v=4"></script>
 </body>
 </html>

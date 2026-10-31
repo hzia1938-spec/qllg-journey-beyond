@@ -8,15 +8,57 @@ import { makeBody } from './body.js';
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // ------------------------------------------------------------------ breath ---
+function circleLine(r, mat, segs = 160) {
+  const pts = [];
+  for (let i = 0; i <= segs; i++) { const a = (i / segs) * Math.PI * 2; pts.push(V3(Math.cos(a) * r, Math.sin(a) * r, 0)); }
+  return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+}
+
 export function breathWorld() {
   const group = new THREE.Group();
   const follow = [
     skyDome({ top: 0x04050d, horizon: 0x101a3c, bottom: 0x020309 }),
     stars({ count: 2400, seed: 11, size: 2.0 }),
   ];
+  // soft nebula colours far away
+  [[0x3a2a9a, -0.5, 0.25, -0.8, 300, 0.2], [0x1d5bd0, 0.62, 0.1, -0.75, 260, 0.18], [0x7a2f8f, 0.12, 0.55, -0.6, 220, 0.14],
+   [0x135a7a, -0.3, -0.25, -0.9, 240, 0.16], [0x5a2ab0, 0.85, 0.4, 0.2, 230, 0.12]].forEach(([c, x, y, z, sc, op]) => {
+    const n = glowSprite(c, sc, op); n.position.set(x, y, z).normalize().multiplyScalar(420); follow.push(n);
+  });
   const dust = drifters({ count: 320, box: [-6, 6, -2.5, 3, -8, 4], color: 0x9fc4ff, size: 0.75, seed: 5, opacity: 0.5 });
   group.add(dust);
-  return { name: 'breath', group, follow, fog: null, start: { pos: V3(0, 0, 0), yaw: 0 }, drift: V3(0, 0, 0), update() {} };
+
+  // the "seed of life" drawn in light behind the guiding light; it breathes with you
+  const lineMat = (c, o) => new THREE.LineBasicMaterial({
+    color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const inner = lineMat(0x9fd0ff, 0.3), outer = lineMat(0xffd98a, 0.26), faint = lineMat(0x9fd0ff, 0.12);
+  const mandala = new THREE.Group();
+  const R = 0.5;
+  mandala.add(circleLine(R, inner));
+  for (let k = 0; k < 6; k++) {
+    const c = circleLine(R, inner);
+    c.position.set(Math.cos((k * Math.PI) / 3) * R, Math.sin((k * Math.PI) / 3) * R, 0);
+    mandala.add(c);
+  }
+  mandala.add(circleLine(R * 2, outer), circleLine(R * 2.12, faint), circleLine(R * 2.6, faint));
+  for (let k = 0; k < 12; k++) {
+    const dot = glowSprite(0xffe2a0, 0.09, 0.8);
+    dot.position.set(Math.cos((k * Math.PI) / 6) * R * 2.12, Math.sin((k * Math.PI) / 6) * R * 2.12, 0);
+    mandala.add(dot);
+  }
+  mandala.position.set(0, 0.05, -3.4);
+  group.add(mandala);
+  return {
+    name: 'breath', group, follow, fog: null, start: { pos: V3(0, 0, 0), yaw: 0 }, drift: V3(0, 0, 0),
+    update(t, dt, env) {
+      const b = Math.min(1, Math.max(0, (env.breath - 0.6) / 0.4));
+      mandala.rotation.z = t * 0.025;
+      mandala.scale.setScalar(0.78 + 0.42 * b);
+      inner.opacity = 0.18 + 0.22 * b;
+      outer.opacity = 0.14 + 0.2 * b;
+    },
+  };
 }
 
 // -------------------------------------------------------------------- lift ---
@@ -193,36 +235,79 @@ export function forestWorld() {
   const moon = glowSprite(0xdfe9ff, 46, 0.95); moon.position.copy(moonDir).multiplyScalar(400); follow.push(moon);
   const moonCore = glowSprite(0xffffff, 10, 1.0); moonCore.position.copy(moonDir).multiplyScalar(399); follow.push(moonCore);
 
-  group.add(new THREE.HemisphereLight(0x6a8fd0, 0x0f2018, 1.25));
-  const dl = new THREE.DirectionalLight(0xb4c8ff, 1.1); dl.position.copy(moonDir).multiplyScalar(50); group.add(dl);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({ color: 0x0a1712 }));
+  group.add(new THREE.HemisphereLight(0x5a7fc0, 0x0a140f, 0.8));
+  const dl = new THREE.DirectionalLight(0xb4c8ff, 0.8); dl.position.copy(moonDir).multiplyScalar(50); group.add(dl);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({ color: 0x060d0a }));
   ground.rotation.x = -Math.PI / 2; group.add(ground);
 
   const r = rng(77), N = 190;
   const trunkG = new THREE.CylinderGeometry(0.16, 0.3, 1, 7); trunkG.translate(0, 0.5, 0);
-  const coneG = new THREE.ConeGeometry(1, 1, 9); coneG.translate(0, 0.5, 0);
+  const coneG = new THREE.ConeGeometry(1, 1, 10); coneG.translate(0, 0.5, 0);
   const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshLambertMaterial({ color: 0x24190f }), N);
-  const lower = new THREE.InstancedMesh(coneG, new THREE.MeshLambertMaterial({ color: 0x14473d, emissive: 0x03120d }), N);
-  const upper = new THREE.InstancedMesh(coneG, new THREE.MeshLambertMaterial({ color: 0x1a5a4b, emissive: 0x04160f }), N);
+  // three tiers per pine, darker below and moonlit above
+  const tierDefs = [[0x103a31, 0x020c09, 0.18, 0.46, 1.0], [0x15493d, 0x03100c, 0.38, 0.4, 0.74], [0x1c5c4c, 0x041510, 0.58, 0.36, 0.48]];
+  const tiers = tierDefs.map(([c, e]) => new THREE.InstancedMesh(coneG, new THREE.MeshLambertMaterial({ color: c, emissive: e }), N));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
     const side = r() < 0.5 ? -1 : 1;
     const x = side * (2.6 + Math.pow(r(), 1.4) * 34);
     const z = 14 - r() * 190;
-    const h = 7 + r() * 6, w = 1.6 + r() * 1.2;
-    q.setFromAxisAngle(V3(0, 1, 0), r() * 6.28);
-    trunks.setMatrixAt(i, m.compose(p.set(x, 0, z), q, s.set(1, h, 1)));
-    lower.setMatrixAt(i, m.compose(p.set(x, h * 0.25, z), q, s.set(w, h * 0.55, w)));
-    upper.setMatrixAt(i, m.compose(p.set(x, h * 0.55, z), q, s.set(w * 0.68, h * 0.5, w * 0.68)));
+    const h = 7 + r() * 7, w = 1.5 + r() * 1.3;
+    const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((r() - 0.5) * 0.08, r() * 6.28, (r() - 0.5) * 0.08));
+    trunks.setMatrixAt(i, m.compose(p.set(x, 0, z), lean, s.set(1, h, 1)));
+    tierDefs.forEach(([, , y, hh, ww], k) => {
+      tiers[k].setMatrixAt(i, m.compose(p.set(x, h * y, z), lean, s.set(w * ww, h * hh, w * ww)));
+    });
   }
-  group.add(trunks, lower, upper);
+  group.add(trunks, ...tiers);
+  // glowing flowers and mushrooms on the forest floor
+  const fr = rng(17), fn = 900, fpos = new Float32Array(fn * 3), fcol = new Float32Array(fn * 3);
+  const palette = [new THREE.Color(0x4dffd8), new THREE.Color(0xb18cff), new THREE.Color(0xffe08a), new THREE.Color(0x7fc8ff)];
+  let k = 0;
+  while (k < fn) {
+    const cx = (fr() < 0.5 ? -1 : 1) * (1.4 + fr() * 11), cz = 7 - fr() * 78, col = palette[Math.floor(fr() * palette.length)];
+    const count = 6 + Math.floor(fr() * 12);
+    for (let j = 0; j < count && k < fn; j++, k++) {
+      const a = fr() * 6.28, d = Math.sqrt(fr()) * 0.7;
+      fpos.set([cx + Math.cos(a) * d, 0.04 + fr() * 0.22, cz + Math.sin(a) * d], k * 3);
+      fcol.set([col.r, col.g, col.b], k * 3);
+    }
+  }
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3));
+  fg.setAttribute('color', new THREE.BufferAttribute(fcol, 3));
+  group.add(new THREE.Points(fg, new THREE.PointsMaterial({
+    map: glowTexture(), size: 0.22, vertexColors: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false, sizeAttenuation: true, fog: false,
+  })));
+  // shafts of moonlight between the trees: brightest in the middle, fading at their edges and ends
+  const beamMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+    uniforms: { uColor: { value: new THREE.Color(0xa9c4ff) }, uOpacity: { value: 0.11 } },
+    vertexShader: `varying float vY; varying float vFace;
+      void main(){ vY = uv.y; vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(modelMatrix) * normal); vFace = abs(dot(n, normalize(cameraPosition - wp.xyz)));
+        gl_Position = projectionMatrix * viewMatrix * wp; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uOpacity; varying float vY; varying float vFace;
+      void main(){ float along = smoothstep(0.0, 0.35, vY) * (1.0 - smoothstep(0.75, 1.0, vY));
+        float a = pow(vFace, 2.2) * along * uOpacity; gl_FragColor = vec4(uColor * a, a);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const beamDir = moonDir.clone().negate();
+  [[-3.5, -16, 2.2], [4.2, -27, 2.8], [-5.5, -41, 3.2], [3.0, -55, 2.6]].forEach(([bx, bz, br]) => {
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(br * 0.55, br, 34, 32, 1, true), beamMat);
+    beam.quaternion.setFromUnitVectors(V3(0, -1, 0), beamDir);
+    beam.position.set(bx, 0, bz).addScaledVector(beamDir, -17);
+    group.add(beam);
+  });
   const flies = drifters({ count: 1300, box: [-12, 12, 0.3, 5.0, 8, -70], color: 0xd2ff7a, size: 2.1, seed: 13 });
   group.add(flies);
   // low moonlit mist drifting between the trees
   const rm = rng(55);
   for (let i = 0; i < 12; i++) {
     const mist = new THREE.Mesh(new THREE.CircleGeometry(9 + rm() * 6, 40), new THREE.MeshBasicMaterial({
-      map: glowTexture(), color: 0x86a8e0, transparent: true, opacity: 0.12 + rm() * 0.1, depthWrite: false,
+      map: glowTexture(), color: 0x7f9ed6, transparent: true, opacity: 0.03 + rm() * 0.035, depthWrite: false,
       blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
     }));
     mist.rotation.x = -Math.PI / 2;
@@ -251,7 +336,7 @@ const AURORA_FS = /* glsl */`
     float flow = 0.55 + 0.45 * sin(x * 9.0 - uTime * 0.35 + y * 2.5 + uSeed);
     float edge = smoothstep(0.0, 0.12, x) * smoothstep(1.0, 0.88, x);
     vec3 col = mix(uLow, uHigh, smoothstep(0.2, 0.95, y));
-    float a = curtain * (0.3 + 0.7 * bands) * flow * edge * 0.9;
+    float a = curtain * (0.3 + 0.7 * bands) * flow * edge * 0.62;
     gl_FragColor = vec4(col, a);
     #include <colorspace_fragment>
   }`;
@@ -276,34 +361,51 @@ function ribbon(radius, y0, height, arc, centre, low, high, seed) {
   return mesh;
 }
 
-function mountainRing(radius, hMin, hMax, seed, base, rock, snow) {
-  const r = rng(seed), N = 260;
-  const pos = [], col = [], idx = [];
-  const cBase = new THREE.Color(base), cRock = new THREE.Color(rock), cSnow = new THREE.Color(snow);
-  const f = [r() * 6, r() * 6, r() * 6, r() * 6];
-  for (let i = 0; i <= N; i++) {
-    const th = (i / N) * Math.PI * 2;
-    let h = 0.5 + 0.28 * Math.sin(th * 3 + f[0]) + 0.18 * Math.sin(th * 7 + f[1]) + 0.12 * Math.sin(th * 17 + f[2])
-      + 0.07 * Math.sin(th * 41 + f[3]);
-    h += (r() - 0.5) * 0.16;
-    h = hMin + (hMax - hMin) * Math.min(1, Math.max(0, h));
-    const rr = radius + (r() - 0.5) * radius * 0.08;
-    const x = Math.sin(th) * rr, z = -Math.cos(th) * rr;
-    const ridge = h * (0.72 + r() * 0.08);
-    pos.push(x, -2, z, x * 1.004, ridge, z * 1.004, x, h, z);
-    col.push(cBase.r, cBase.g, cBase.b, cRock.r, cRock.g, cRock.b, cSnow.r, cSnow.g, cSnow.b);
-    if (i < N) {
-      const a = i * 3;
-      idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4);
-    }
+function valueNoise(seed) {
+  const r = rng(seed), P = new Uint16Array(512), V = new Float32Array(256);
+  const perm = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 512; i++) P[i] = perm[i & 255];
+  for (let i = 0; i < 256; i++) V[i] = r();
+  const val = (ix, iz) => V[P[(ix & 255) + P[iz & 255]]];
+  return (x, z) => {
+    const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+    const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    const a = val(ix, iz) + (val(ix + 1, iz) - val(ix, iz)) * u;
+    const b = val(ix, iz + 1) + (val(ix + 1, iz + 1) - val(ix, iz + 1)) * u;
+    return a + (b - a) * v;
+  };
+}
+
+// snow-capped mountains: ridged noise rising into a ring of high peaks around a quiet valley
+function terrain(seed) {
+  const n = valueNoise(seed);
+  const ridged = (x, z) => { let s = 0, a = 0.55, f = 1; for (let o = 0; o < 5; o++) { const v = 1 - Math.abs(2 * n(x * f, z * f) - 1); s += v * v * a; a *= 0.5; f *= 2.1; } return s; };
+  const fbm = (x, z) => { let s = 0, a = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += n(x * f + 13.1, z * f + 7.7) * a; a *= 0.5; f *= 2.03; } return s; };
+  const size = 780, seg = 200;
+  const g = new THREE.PlaneGeometry(size, size, seg, seg);
+  g.rotateX(-Math.PI / 2);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const ring = Math.min(1, Math.max(0, (Math.hypot(x, z) - 55) / 250));
+    pos.setY(i, ridged(x * 0.0085, z * 0.0085) * (7 + 112 * ring * ring) + fbm(x * 0.045, z * 0.045) * 2.2 - 6);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.setIndex(idx);
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, toneMapped: false }));
-  m.frustumCulled = false;
-  return m;
+  g.computeVertexNormals();
+  const nrm = g.attributes.normal, col = new Float32Array(pos.count * 3);
+  const rock = new THREE.Color(0x070b14), mid = new THREE.Color(0x1b2640), snow = new THREE.Color(0x8fa3cc), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const ny = nrm.getY(i), h = pos.getY(i);
+    const flat = Math.min(1, Math.max(0, (ny - 0.62) / 0.25));
+    const high = Math.min(1, Math.max(0, (h - 4) / 40));
+    const sn = Math.min(1, flat * (0.25 + 0.8 * high) + high * 0.35);
+    c.copy(rock).lerp(mid, Math.min(1, ny * 0.9)).lerp(snow, sn);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.frustumCulled = false;
+  return mesh;
 }
 
 export function auroraWorld() {
@@ -319,15 +421,14 @@ export function auroraWorld() {
     ribbon(185, 45, 75, 2.2, 2.9, 0x2bffb0, 0xff6fa0, 8.4),
   ];
   ribbons.forEach((rb) => follow.push(rb));
-  // the traveler floats high: near peaks sit below eye level, the far range rises behind them
-  const far = mountainRing(210, 40, 95, 61, 0x050b16, 0x1c2a42, 0x8ea6cc); far.position.y = -38;
-  const near = mountainRing(95, 14, 46, 62, 0x02050b, 0x111b2c, 0x6c84aa); near.position.y = -44;
-  follow.push(far, near);
-  const snow = new THREE.Mesh(new THREE.CircleGeometry(400, 64), new THREE.MeshBasicMaterial({ color: 0x15243a, toneMapped: false }));
-  snow.rotation.x = -Math.PI / 2; snow.position.y = -45;
-  follow.push(snow);
+  group.add(terrain(62));
+  group.add(new THREE.HemisphereLight(0x4a64a0, 0x05080f, 0.32));
+  const moon = new THREE.DirectionalLight(0xb9c9ff, 0.8); moon.position.set(70, 90, -30); group.add(moon);
+  const green = new THREE.DirectionalLight(0x46ffa6, 0.38); green.position.set(0, 70, -140); group.add(green);
+  const rose = new THREE.DirectionalLight(0xff6fb6, 0.22); rose.position.set(-100, 60, -60); group.add(rose);
   return {
-    name: 'aurora', group, follow, fog: null, start: { pos: V3(0, 0, 0), yaw: 0 }, drift: V3(0, 0, -0.35),
+    name: 'aurora', group, follow, fog: new THREE.FogExp2(0x0a1828, 0.0028), start: { pos: V3(0, 16, 0), yaw: 0 },
+    drift: V3(0, 0, -0.35),
     update(t) { ribbons.forEach((rb) => { rb.material.uniforms.uTime.value = t; }); },
     anchor: (rig) => (t) => rig.position.clone().add(V3(-3.0 + Math.sin(t * 0.5) * 0.6, 6.0 + Math.sin(t * 0.8) * 0.4, -5.5)),
   };

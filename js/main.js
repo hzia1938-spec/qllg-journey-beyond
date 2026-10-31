@@ -1,11 +1,15 @@
 // Journey Beyond: QLLG Game 1. A seated, guided journey; works in VR headsets (WebXR),
 // phones and computers. Test switches: ?shot=ocean (one world, no UI), ?test&speed=8&auto
-// (silent fast run-through), ?emulate (WebXR emulator for desktop testing).
+// (silent fast run-through), ?emulate (WebXR emulator for desktop testing), ?nobloom.
 import * as THREE from 'three';
+import { EffectComposer } from '../lib/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from '../lib/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from '../lib/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from '../lib/addons/postprocessing/OutputPass.js';
 import { AudioEngine } from './audio.js';
 import { Orb } from './orb.js';
 import { BUILDERS } from './worlds.js';
-import { COLORS, disposeTree } from './gfx.js';
+import { COLORS, disposeTree, glowTexture } from './gfx.js';
 import { loadBody } from './body.js';
 
 const Q = new URLSearchParams(location.search);
@@ -21,8 +25,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMapping = THREE.NoToneMapping;     // colours are authored directly; the glow pass adds the bloom
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local');
 document.getElementById('stage').appendChild(renderer.domElement);
@@ -33,21 +36,40 @@ const rig = new THREE.Group();
 rig.add(camera);
 scene.add(rig);
 
+// glow (bloom) for phones and computers; VR headsets render directly
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.55, 0.55);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+let bloomOn = !Q.has('nobloom');
+const BLOOM = {   // strength, radius, threshold per world
+  breath: [0.95, 0.6, 0.5], lift: [0.9, 0.6, 0.45], ocean: [0.32, 0.45, 0.92], forest: [0.95, 0.6, 0.55],
+  aurora: [0.42, 0.5, 0.78], earth: [0.9, 0.55, 0.55],
+};
+
 addEventListener('resize', () => {
   if (renderer.xr.isPresenting) return;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 
 // --------------------------------------------------------------- HUD (camera) ---
-const fade = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 12), new THREE.MeshBasicMaterial({
-  color: 0x000000, transparent: true, opacity: 1, side: THREE.BackSide, depthTest: false, depthWrite: false,
-  toneMapped: false, fog: false,
-}));
-fade.renderOrder = 10000;
-camera.add(fade);
-let fadeAnim = null;
+function hudSphere(radius, order) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 12), new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false,
+    toneMapped: false, fog: false,
+  }));
+  m.renderOrder = order;
+  camera.add(m);
+  return m;
+}
+const fade = hudSphere(0.25, 10000);
+fade.material.opacity = 1;
+const flash = hudSphere(0.24, 9997);
+let fadeAnim = null, flashT0 = -99, flashPeak = 0;
 function fadeTo(color, opacity, seconds) {
   return new Promise((resolve) => {
     fade.material.color.set(color);
@@ -73,29 +95,35 @@ reticle.position.set(0, 0, -1.2);
 reticle.renderOrder = 9998;
 camera.add(reticle);
 
-// captions: DOM on screens, a floating panel in VR
+// text panels for VR (captions below, words and pause notice above)
+function textPanel(w, h, x, y, z, tilt) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+  }));
+  mesh.position.set(x, y, z);
+  mesh.rotation.x = tilt;
+  mesh.renderOrder = 9999;
+  mesh.visible = false;
+  camera.add(mesh);
+  return { mesh, c, tex };
+}
+const capPanel = textPanel(1.2, 0.3, 0, -0.42, -1.4, 0.22);
+const wordPanel = textPanel(1.4, 0.35, 0, 0.16, -1.6, -0.05);
 const capEl = document.getElementById('caption');
-const capCanvas = document.createElement('canvas');
-capCanvas.width = 1024; capCanvas.height = 256;
-const capTex = new THREE.CanvasTexture(capCanvas);
-capTex.colorSpace = THREE.SRGBColorSpace;
-const capPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({
-  map: capTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
-}));
-capPanel.position.set(0, -0.42, -1.4);
-capPanel.rotation.x = 0.22;
-capPanel.renderOrder = 9999;
-capPanel.visible = false;
-camera.add(capPanel);
-let capUntil = 0;
+const wordEl = document.getElementById('word');
+let capUntil = 0, wordUntil = 0;
 
-function drawPanel(text, title) {
-  const g = capCanvas.getContext('2d');
+function drawPanel(panel, text, { color = '#ffffff', size = 42, backing = true, tracking = 0 } = {}) {
+  const g = panel.c.getContext('2d');
   g.clearRect(0, 0, 1024, 256);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  const size = title ? 54 : 42;
   g.font = `700 ${size}px Futura, "Avenir Next", "Century Gothic", sans-serif`;
+  if ('letterSpacing' in g) g.letterSpacing = `${tracking}px`;
   const words = text.split(' '), lines = [];
   let cur = '';
   for (const w of words) {
@@ -104,25 +132,38 @@ function drawPanel(text, title) {
   }
   if (cur) lines.push(cur);
   const lh = size * 1.22, y0 = 128 - ((lines.length - 1) * lh) / 2;
-  const bw = Math.min(1000, Math.max(...lines.map((l) => g.measureText(l).width)) + 70);
-  const bh = lines.length * lh + 34;
-  g.fillStyle = 'rgba(4, 8, 20, 0.55)';
-  g.beginPath();
-  g.roundRect(512 - bw / 2, 128 - bh / 2, bw, bh, 26);
-  g.fill();
-  g.shadowColor = 'rgba(0,0,0,0.9)'; g.shadowBlur = 14;
-  lines.forEach((l, i) => {
-    g.fillStyle = title && i === lines.length - 1 ? '#ffcc4d' : '#ffffff';
-    g.fillText(l, 512, y0 + i * lh);
-  });
-  capTex.needsUpdate = true;
+  if (backing) {
+    const bw = Math.min(1000, Math.max(...lines.map((l) => g.measureText(l).width)) + 70);
+    const bh = lines.length * lh + 34;
+    g.fillStyle = 'rgba(4, 8, 20, 0.55)';
+    g.beginPath();
+    g.roundRect(512 - bw / 2, 128 - bh / 2, bw, bh, 26);
+    g.fill();
+  }
+  g.shadowColor = backing ? 'rgba(0,0,0,0.9)' : color;
+  g.shadowBlur = backing ? 14 : 30;
+  g.fillStyle = color;
+  lines.forEach((l, i) => g.fillText(l, 512, y0 + i * lh));
+  panel.tex.needsUpdate = true;
 }
 
 function showCaption(text, seconds) {
   capEl.textContent = text;
   capEl.classList.add('on');
-  drawPanel(text);
+  drawPanel(capPanel, text);
   capUntil = T + seconds / SPEED + 0.5;
+}
+
+function showWord(text, color, seconds = 2.6) {
+  const css = '#' + new THREE.Color(color).getHexString();
+  wordEl.textContent = text;
+  wordEl.style.color = css;
+  wordEl.style.textShadow = `0 0 28px ${css}, 0 2px 16px rgba(0,0,0,.55), 0 0 3px rgba(0,0,0,.7)`;
+  wordEl.classList.remove('on');
+  void wordEl.offsetWidth;
+  wordEl.classList.add('on');
+  drawPanel(wordPanel, text, { color: css, size: 92, backing: false, tracking: 18 });
+  wordUntil = T + seconds;
 }
 
 // ------------------------------------------------------------------- input ---
@@ -145,7 +186,7 @@ canvas.addEventListener('pointermove', (e) => {
   hintEl.style.opacity = 0;
 });
 canvas.addEventListener('pointerup', (e) => {
-  if (down && !down.moved) {
+  if (down && !down.moved && !paused) {
     const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, camera);
@@ -160,9 +201,11 @@ addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp') pitch = Math.min(1.35, pitch + step);
   if (e.key === 'ArrowDown') pitch = Math.max(-1.35, pitch - step);
   if (e.key.startsWith('Arrow')) lastInteract = T;
+  if (e.key === ' ' || e.key.toLowerCase() === 'p') { e.preventDefault(); setPaused(!paused); }
+  if (e.key === 'Escape') setPaused(true);
 });
 
-// VR controllers: point and press the trigger (or pinch) to gather a light
+// VR controllers: point and pull the trigger (or pinch) to gather a light; squeeze the grip to pause
 const tmpM = new THREE.Matrix4();
 for (let i = 0; i < 2; i++) {
   const c = renderer.xr.getController(i);
@@ -174,33 +217,40 @@ for (let i = 0; i < 2; i++) {
   c.addEventListener('connected', (ev) => { line.visible = ev.data && ev.data.targetRayMode === 'tracked-pointer'; });
   c.addEventListener('disconnected', () => { line.visible = false; });
   c.addEventListener('selectstart', () => {
+    if (paused) { setPaused(false); return; }
     const ray = new THREE.Raycaster();
     tmpM.identity().extractRotation(c.matrixWorld);
     ray.ray.origin.setFromMatrixPosition(c.matrixWorld);
     ray.ray.direction.set(0, 0, -1).applyMatrix4(tmpM);
     tryGather(ray);
   });
+  c.addEventListener('squeezestart', () => setPaused(!paused));
   rig.add(c);
 }
 
 // ------------------------------------------------------------------- state ---
 const audio = new AudioEngine();
-const env = { rig, camera, camWorld: new THREE.Vector3(), camDir: new THREE.Vector3() };
+const env = { rig, camera, camWorld: new THREE.Vector3(), camDir: new THREE.Vector3(), breath: 0.85 };
 const ORBS = {
   truth: new Orb('truth', COLORS.truth, 523.25, 0),
   freedom: new Orb('freedom', COLORS.freedom, 587.33, 1),
   love: new Orb('love', COLORS.love, 659.25, 2),
   sovereignty: new Orb('sovereignty', COLORS.sovereignty, 783.99, 3),
 };
+const NAMES = { truth: 'TRUTH', freedom: 'FREEDOM', love: 'LOVE', sovereignty: 'SOVEREIGNTY' };
 const guide = new Orb('guide', COLORS.guide, 392.0, 0);
 Object.values(ORBS).concat(guide).forEach((o) => scene.add(o.group));
 const found = [];
 let world = null, tickers = [], T = 0, active = null, seekT0 = 0, hintDone = false, hintAt = 0, hintId = null;
-let breath = null, lift = null;
+let breath = null, lift = null, titleMode = false, started = false, finished = false;
+let paused = false, autoPaused = false;
+const timers = [], bursts = [];
 const hintEl = document.getElementById('hint');
 const foundEl = document.getElementById('found');
+const pauseBtn = document.getElementById('btn-pause');
+const pauseEl = document.getElementById('paused');
 
-function setWorld(name) {
+function setWorld(name, quiet = false) {
   if (world) {
     scene.remove(world.group);
     world.follow.forEach((o) => rig.remove(o));
@@ -216,17 +266,79 @@ function setWorld(name) {
   if (!renderer.xr.isPresenting) { yaw = 0; pitch = 0; }
   tickers = [];
   [world.group, ...world.follow].forEach((root) => root.traverse((o) => { if (o.userData.tick) tickers.push(o.userData.tick); }));
-  if (!SHOT && !TEST) audio.setWorld(name);
+  const [s, r, th] = BLOOM[name] || [0.85, 0.55, 0.55];
+  bloom.strength = s; bloom.radius = r; bloom.threshold = th;
+  if (!quiet && !SHOT && !TEST) audio.setWorld(name);
   log('world', name);
 }
 
+// ------------------------------------------------------------------- pause ---
+function setPaused(p, auto = false) {
+  if (!started || finished || p === paused) return;
+  paused = p;
+  autoPaused = p && auto;
+  if (!TEST) { if (p) audio.ctx.suspend(); else audio.ctx.resume(); }
+  pauseBtn.classList.toggle('is-paused', p);
+  pauseBtn.setAttribute('aria-label', p ? 'Resume' : 'Pause');
+  pauseEl.classList.toggle('hidden', !p || renderer.xr.isPresenting);
+  if (p && renderer.xr.isPresenting) {
+    drawPanel(wordPanel, 'Paused · squeeze or pull the trigger to continue', { size: 44 });
+    wordUntil = Infinity;
+  } else if (!p) {
+    wordUntil = Math.min(wordUntil, T);
+  }
+  log(p ? 'paused' : 'resumed');
+}
+pauseBtn.addEventListener('click', () => setPaused(!paused));
+document.getElementById('btn-resume').addEventListener('click', () => setPaused(false));
+document.getElementById('btn-restart').addEventListener('click', () => location.reload());
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true, true); });
+
 // --------------------------------------------------------------- gathering ---
 function tryGather(ray) {
-  if (!active || active.state !== 'wait') return;
+  if (!active || active.state !== 'wait' || paused) return;
   if (ray.intersectObject(active.hit, false).length) gather(active);
 }
 
+const BURST_VS = /* glsl */`
+  attribute vec3 aDir; uniform float uAge, uPixel; varying float vA;
+  void main() {
+    vec3 p = position + aDir * (1.0 - exp(-uAge * 2.6));
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    vA = clamp(1.0 - uAge / 1.8, 0.0, 1.0);
+    gl_PointSize = clamp(uPixel * 26.0 / max(-mv.z, 0.4), 2.0, 40.0);
+  }`;
+const BURST_FS = /* glsl */`
+  uniform vec3 uColor; varying float vA;
+  void main() { float d = length(gl_PointCoord - 0.5); float c = smoothstep(0.5, 0.0, d);
+    gl_FragColor = vec4(uColor * (0.7 + c), c * c * vA);
+    #include <colorspace_fragment>
+  }`;
+function spawnBurst(pos, color) {
+  const n = 170, p = new Float32Array(n * 3), d = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize()
+      .multiplyScalar(0.5 + Math.random() * 1.6);
+    p.set([pos.x, pos.y, pos.z], i * 3);
+    d.set([v.x, v.y, v.z], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  g.setAttribute('aDir', new THREE.BufferAttribute(d, 3));
+  const m = new THREE.ShaderMaterial({
+    vertexShader: BURST_VS, fragmentShader: BURST_FS, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false,
+    uniforms: { uAge: { value: 0 }, uPixel: { value: 1 }, uColor: { value: new THREE.Color(color) } },
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  bursts.push({ pts, born: T });
+}
+
 function gather(orb) {
+  const at = orb.group.getWorldPosition(new THREE.Vector3());
   const ok = orb.collect(rig, camera, () => {
     found.push(orb);
     foundEl.children[found.length - 1]?.classList.add('lit');
@@ -235,6 +347,10 @@ function gather(orb) {
     done && done();
   });
   if (!ok) return;
+  spawnBurst(at, orb.color);
+  flash.material.color.copy(orb.color);
+  flashT0 = T; flashPeak = 0.32;
+  showWord(NAMES[orb.name] || orb.name.toUpperCase(), orb.color);
   if (!TEST) audio.gather(orb.note);
   active = null;
   hintEl.style.opacity = 0;
@@ -255,7 +371,8 @@ function seek(orb, anchorFn, hint) {
 }
 
 // ------------------------------------------------------------------ helpers ---
-const wait = (s) => new Promise((r) => setTimeout(r, (s * 1000) / SPEED));
+// waits run on game time, so pausing freezes the whole journey
+const wait = (s) => new Promise((r) => timers.push({ at: T + s / SPEED, r }));
 
 async function say(id) {
   const line = audio.lines[id];
@@ -302,7 +419,10 @@ function companionsHome() {
 // ----------------------------------------------------------------- journey ---
 async function journey() {
   log('start');
+  if (fade.material.opacity < 0.99) await fadeTo(0x000000, 1, 1.4);
+  titleMode = false;
   foundEl.hidden = false;
+  pauseBtn.hidden = false;
   setWorld('breath');
   showGuide(false);
   await fadeTo(0x000000, 0, 3);
@@ -377,6 +497,7 @@ async function journey() {
   const finaleSay = say('finale_1');
   await wait(2.4);
   world.reveal();
+  bloom.strength = 1.15;
   await finaleSay; await wait(1.0);
   await say('finale_2'); await wait(2.5);
 
@@ -399,27 +520,44 @@ async function journey() {
 }
 
 function finish() {
+  finished = true;
   capEl.classList.remove('on');
   foundEl.hidden = true;
+  pauseBtn.hidden = true;
   hintEl.style.opacity = 0;
   if (renderer.xr.isPresenting) {
-    drawPanel('Thank you for traveling · QLLG.org', true);
-    capPanel.position.set(0, 0, -1.4); capPanel.rotation.x = 0;
-    capPanel.visible = true; capUntil = Infinity;
+    drawPanel(capPanel, 'Thank you for traveling · QLLG.org', { color: '#ffcc4d', size: 54 });
+    capPanel.mesh.position.set(0, 0, -1.4); capPanel.mesh.rotation.x = 0;
+    capUntil = Infinity;
     setTimeout(() => renderer.xr.getSession()?.end(), 7000);
   }
   document.getElementById('end').classList.remove('hidden');
 }
 
 // -------------------------------------------------------------------- loop ---
-let lastFrame = null;
+let lastFrame = null, perfFrames = 0, perfSum = 0;
 renderer.setAnimationLoop((time) => {
-  const dt = lastFrame === null ? 1 / 60 : Math.min(0.05, Math.max(0, (time - lastFrame) / 1000));
+  const real = lastFrame === null ? 1 / 60 : Math.min(0.05, Math.max(0, (time - lastFrame) / 1000));
   lastFrame = time;
+  const dt = paused ? 0 : real;
   T += dt;
   const xr = renderer.xr.isPresenting;
+
+  // automatic quality: if a phone can't keep up, drop the glow and render at 1x
+  if (started && !xr && bloomOn && !paused && perfFrames < 180) {
+    perfFrames++; perfSum += real;
+    if (perfFrames === 180 && perfSum / 180 > 0.03) {
+      bloomOn = false;
+      renderer.setPixelRatio(1);
+      log('quality: glow off for this device');
+    }
+  }
+  for (let i = timers.length - 1; i >= 0; i--) {
+    if (T >= timers[i].at) { const { r } = timers[i]; timers.splice(i, 1); r(); }
+  }
   if (!xr) {
-    if (lookTarget !== null && T - lastInteract > 2.5) pitch += (lookTarget - pitch) * Math.min(1, dt * 0.9);
+    if (titleMode) { yaw = Math.sin(T * 0.05) * 0.16; pitch = 0.4; }
+    else if (lookTarget !== null && T - lastInteract > 2.5) pitch += (lookTarget - pitch) * Math.min(1, dt * 0.9);
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
   }
   if (lift) {
@@ -430,31 +568,36 @@ renderer.setAnimationLoop((time) => {
   rig.updateMatrixWorld(true);
   camera.getWorldPosition(env.camWorld);
   camera.getWorldDirection(env.camDir);
+
+  // breathing light (and the breath world's pattern breathes with it)
+  let s = 0.85;
+  if (breath) {
+    const e = T - breath.t0;
+    s = e < breath.inhale ? 0.6 + 0.4 * Math.sin((e / breath.inhale) * Math.PI / 2)
+      : 1.0 - 0.4 * Math.sin(Math.min(1, (e - breath.inhale) / breath.exhale) * Math.PI / 2);
+  }
+  env.breath = s;
   if (world) {
-    if (!SHOT) rig.position.addScaledVector(world.drift, dt);
+    if (!SHOT && !titleMode) rig.position.addScaledVector(world.drift, dt);
     world.update(T, dt, env);
   }
   const px = xr ? 1.2 : renderer.getPixelRatio();
   tickers.forEach((f) => f(T, px));
-
-  // breathing light
   if (guide.state !== 'hidden') {
     guide.update(T, dt, rig, camera, env.camDir);
-    if (!guide.anim) {
-      let s = 0.85;
-      if (breath) {
-        const e = T - breath.t0;
-        s = e < breath.inhale ? 0.6 + 0.4 * Math.sin((e / breath.inhale) * Math.PI / 2)
-          : 1.0 - 0.4 * Math.sin(Math.min(1, (e - breath.inhale) / breath.exhale) * Math.PI / 2);
-      }
-      guide.group.scale.setScalar(s * 1.35);
-    }
+    if (!guide.anim) guide.group.scale.setScalar(s * 1.35);
   }
   Object.values(ORBS).forEach((o) => o.update(T, dt, rig, camera, env.camDir));
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i], age = T - b.born;
+    b.pts.material.uniforms.uAge.value = age;
+    b.pts.material.uniforms.uPixel.value = px;
+    if (age > 1.9) { scene.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); bursts.splice(i, 1); }
+  }
 
   // gaze: rest your eyes on the light
   let hovering = false;
-  if (active && active.state === 'wait') {
+  if (active && active.state === 'wait' && !paused) {
     const ray = new THREE.Raycaster(env.camWorld, env.camDir);
     hovering = ray.intersectObject(active.hit, false).length > 0;
     active.gaze = hovering ? Math.min(1, active.gaze + dt / 1.1) : Math.max(0, active.gaze - dt * 1.6);
@@ -467,12 +610,12 @@ renderer.setAnimationLoop((time) => {
     } else if (hintDone && active) {
       active.assist = Math.min(1, (T - hintAt) / (7 / SPEED));
     }
-  } else {
+  } else if (!active) {
     reticle.material.uniforms.uProg.value = 0;
   }
   const retTarget = active ? (hovering ? 0.95 : 0.55) : 0;
   const ra = reticle.material.uniforms.uAlpha;
-  ra.value += (retTarget - ra.value) * Math.min(1, dt * 6);
+  ra.value += (retTarget - ra.value) * Math.min(1, real * 6);
 
   if (fadeAnim) {
     fadeAnim.t += dt;
@@ -481,17 +624,21 @@ renderer.setAnimationLoop((time) => {
     if (u >= 1) { const r = fadeAnim.resolve; fadeAnim = null; r(); }
   }
   fade.visible = fade.material.opacity > 0.002;
+  flash.material.opacity = Math.max(0, flashPeak * (1 - (T - flashT0) / 0.9));
+  flash.visible = flash.material.opacity > 0.002;
   if (T > capUntil) capEl.classList.remove('on');
-  capPanel.visible = xr && T < capUntil;
+  if (T > wordUntil) wordEl.classList.remove('on');
+  capPanel.mesh.visible = xr && T < capUntil;
+  wordPanel.mesh.visible = xr && T < wordUntil;
 
-  renderer.render(scene, camera);
+  if (xr || !bloomOn) renderer.render(scene, camera);
+  else composer.render();
 });
 
 // ------------------------------------------------------------------ start up ---
 const btnPlay = document.getElementById('btn-play');
 const btnVR = document.getElementById('btn-vr');
 const progressEl = document.getElementById('progress');
-let started = false;
 
 function begin() {
   if (started) return;
@@ -511,16 +658,22 @@ async function boot() {
     yaw = THREE.MathUtils.degToRad(Number(Q.get('yaw') || 0));
     pitch = THREE.MathUtils.degToRad(Number(Q.get('pitch') || 0));
     const orbName = { ocean: 'truth', forest: 'freedom', aurora: 'love', earth: 'sovereignty' }[SHOT];
-    if (orbName && world.anchor) { ORBS[orbName].show(world.anchor(rig)); active = ORBS[orbName]; }
-    if (SHOT === 'breath') showGuide(false);
+    if (orbName && world.anchor && !Q.has('finale')) { ORBS[orbName].show(world.anchor(rig)); active = ORBS[orbName]; }
+    if (SHOT === 'breath') { showGuide(false); breath = { t0: 0, inhale: 4, exhale: 6 }; }
     if (Q.has('finale') && SHOT === 'earth') {
-      Object.values(ORBS).forEach((o, i) => { o.state = 'companion'; o.group.visible = true; o.group.scale.setScalar(0.38); });
+      Object.values(ORBS).forEach((o) => { o.state = 'companion'; o.group.visible = true; o.group.scale.setScalar(0.38); });
       const tg = world.finaleTargets();
       Object.values(ORBS).forEach((o, i) => o.toFinale(scene, tg[i], 0));
       world.reveal();
+      bloom.strength = 1.15;
     }
     return;
   }
+  // the living title screen: the Earth turning slowly behind the title
+  titleMode = true;
+  setWorld('earth', true);
+  rig.position.set(0, 2.5, 13);          // further back, so the Earth rises from the bottom of the screen
+  fade.material.opacity = 0;
   if (EMULATE) {
     const { XRDevice, metaQuest3 } = await import('../lib/iwer.module.min.js');
     const dev = new XRDevice(metaQuest3);
@@ -547,6 +700,10 @@ btnVR.addEventListener('click', async () => {
     audio.resume();
     const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] });
     await renderer.xr.setSession(session);
+    session.addEventListener('visibilitychange', () => {
+      if (session.visibilityState !== 'visible') setPaused(true, true);
+      else if (autoPaused) setPaused(false);
+    });
     begin();
   } catch (e) {
     console.error(e);
@@ -555,5 +712,8 @@ btnVR.addEventListener('click', async () => {
 });
 document.getElementById('btn-again').addEventListener('click', () => location.reload());
 
-window.JB = { scene, rig, camera, renderer, ORBS, audio, setWorld: (n) => setWorld(n), get world() { return world; } };
+window.JB = {
+  scene, rig, camera, renderer, composer, ORBS, audio, bloom, setWorld: (n) => setWorld(n), setPaused,
+  get world() { return world; }, get paused() { return paused; }, get T() { return T; },
+};
 boot();

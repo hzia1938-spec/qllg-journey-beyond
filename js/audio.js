@@ -187,7 +187,7 @@ export class AudioEngine {
     }
     if (p.twinkle) {
       this.twinkleTimer = setInterval(() => {
-        if (Math.random() < 0.55) this.bell(p.twinkle[Math.floor(Math.random() * p.twinkle.length)], 0.035, 1.6);
+        if (this.ctx.state === 'running' && Math.random() < 0.55) this.bell(p.twinkle[Math.floor(Math.random() * p.twinkle.length)], 0.035, 1.6);
       }, 700);
     }
     this.layer = { gain, nodes, filt };
