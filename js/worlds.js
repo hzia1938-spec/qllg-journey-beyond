@@ -3,6 +3,7 @@
 //   fog, start: { pos, yaw }, drift (m/s), update(t, dt, env), anchor(t) for this world's light }.
 import * as THREE from 'three';
 import { skyDome, stars, drifters, glowSprite, glowTexture, fresnel, rng, COLORS } from './gfx.js';
+import { makeBody } from './body.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -22,46 +23,75 @@ export function breathWorld() {
 export function liftWorld() {
   const group = new THREE.Group();
   const follow = [
-    skyDome({ top: 0x050817, horizon: 0x172150, bottom: 0x070b1c }),
-    stars({ count: 1600, seed: 21, size: 1.8, opacity: 0.8 }),
-    drifters({ count: 240, box: [-3, 3, -3, 3, -4, 2], color: 0xbfe0ff, size: 0.7, seed: 9, rise: 0.4, span: 7, opacity: 0.7 }),
+    skyDome({ top: 0x060a1f, horizon: 0x1b2a66, bottom: 0x080d26 }),
+    stars({ count: 1800, seed: 21, size: 1.9, opacity: 0.85 }),
+    drifters({ count: 240, box: [-3, 3, -3, 3, -4, 2], color: 0xbfe0ff, size: 0.7, seed: 9, rise: 0.4, span: 7, opacity: 0.6 }),
   ];
-  // the resting body: lying on its back, head below the viewer, feet stretching ahead
-  const body = new THREE.Group();
-  const glow = fresnel(0xa8dcff, { power: 1.6, intensity: 1.25, base: 0.045 });
-  const add = (geo, x, y, z, rx = Math.PI / 2, ry = 0) => {
-    const m = new THREE.Mesh(geo, glow); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); body.add(m); return m;
-  };
-  add(new THREE.SphereGeometry(0.12, 24, 16), 0, 0, 0, 0);
-  add(new THREE.CapsuleGeometry(0.17, 0.42, 6, 16), 0, 0, -0.42);
-  add(new THREE.CapsuleGeometry(0.05, 0.55, 4, 10), 0.27, -0.02, -0.5, Math.PI / 2, 0.1);
-  add(new THREE.CapsuleGeometry(0.05, 0.55, 4, 10), -0.27, -0.02, -0.5, Math.PI / 2, -0.1);
-  add(new THREE.CapsuleGeometry(0.07, 0.78, 4, 12), 0.1, 0, -1.2);
-  add(new THREE.CapsuleGeometry(0.07, 0.78, 4, 12), -0.1, 0, -1.2);
+  [[0x3b2aa8, -0.6, 0.35, -0.7], [0x1f5bd8, 0.7, 0.2, -0.65]].forEach(([c, x, y, z]) => {
+    const n = glowSprite(c, 240, 0.12); n.position.set(x, y, z).normalize().multiplyScalar(420); follow.push(n);
+  });
+
+  // the resting body: lying on its back, head below the traveler, feet stretching ahead
+  const body = makeBody();
   body.position.set(0, -0.95, -0.1);
   group.add(body);
-  const bed = new THREE.Mesh(new THREE.CircleGeometry(1.8, 48), new THREE.MeshBasicMaterial({
-    map: glowTexture(), color: 0x3a6dff, transparent: true, opacity: 0.55, depthWrite: false,
+  const heartWorld = body.userData.heartLocal.clone().add(body.position);
+  const heartGlow = glowSprite(0xffc48a, 0.55, 0.55);
+  heartGlow.position.copy(heartWorld).add(V3(0, 0.05, 0));
+  group.add(heartGlow);
+
+  // bed of light with slowly turning rings
+  const bed = new THREE.Mesh(new THREE.CircleGeometry(1.9, 64), new THREE.MeshBasicMaterial({
+    map: glowTexture(), color: 0x2f62ff, transparent: true, opacity: 0.6, depthWrite: false,
     blending: THREE.AdditiveBlending, toneMapped: false,
   }));
-  bed.rotation.x = -Math.PI / 2; bed.position.set(0, -1.12, -0.75);
+  bed.rotation.x = -Math.PI / 2; bed.position.set(0, -1.1, -0.85);
   group.add(bed);
-  // a faint cord of light from the body to the traveler
-  const cordGeo = new THREE.BufferGeometry().setFromPoints([V3(0, 0, 0), V3(0, 1, 0)]);
+  const rings = [];
+  [[1.15, 0.006, 0.55], [1.42, 0.004, 0.35], [1.7, 0.003, 0.22]].forEach(([r, w, op], i) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r - w, r + w, 160), new THREE.MeshBasicMaterial({
+      color: i === 0 ? 0xcfe6ff : 0x7fb2ff, transparent: true, opacity: op, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide,
+    }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(0, -1.095, -0.85);
+    group.add(ring); rings.push(ring);
+  });
+  const ringDots = drifters({ count: 90, box: [-1.6, 1.6, -1.09, -1.08, -2.4, 0.7], color: 0x9fc8ff, size: 0.25, seed: 33, opacity: 0.5 });
+  group.add(ringDots);
+
+  // a soft, swaying cord of light from the heart to the traveler, with pulses rising along it
+  const N = 48;
+  const cordGeo = new THREE.BufferGeometry();
+  cordGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
   const cord = new THREE.Line(cordGeo, new THREE.LineBasicMaterial({
-    color: 0xd8ecff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, toneMapped: false, depthWrite: false,
+    color: 0xd8ecff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, toneMapped: false, depthWrite: false,
   }));
   cord.frustumCulled = false;
   group.add(cord);
-  const chest = V3(0, -0.85, -0.45);
+  const pulses = [0, 0.33, 0.66].map(() => { const s = glowSprite(0xe8f4ff, 0.12, 0.9); group.add(s); return s; });
+  const curve = new THREE.CatmullRomCurve3([V3(), V3(), V3(), V3()]);
   return {
     name: 'lift', group, follow, fog: null, start: { pos: V3(0, 0.45, 0.75), yaw: 0 }, drift: V3(0, 0, 0),
     update(t, dt, env) {
-      const head = env.camWorld.clone().add(V3(0, -0.28, 0));
-      const p = cord.geometry.attributes.position;
-      p.setXYZ(0, chest.x, chest.y, chest.z); p.setXYZ(1, head.x, head.y, head.z); p.needsUpdate = true;
-      cord.material.opacity = 0.42 * Math.max(0, 1 - env.rig.position.y / 5);
-      body.children.forEach((m, i) => { m.scale.setScalar(1 + 0.02 * Math.sin(t * 1.4 + i)); });
+      const head = env.camWorld.clone().add(V3(0, -0.3, 0));
+      const a = heartWorld, b = head;
+      const sway = Math.sin(t * 0.8) * 0.08, sway2 = Math.cos(t * 0.6) * 0.06;
+      curve.points[0].copy(a);
+      curve.points[1].lerpVectors(a, b, 0.33).add(V3(sway, 0.05, sway2));
+      curve.points[2].lerpVectors(a, b, 0.66).add(V3(-sway2, 0.0, sway));
+      curve.points[3].copy(b);
+      const arr = cordGeo.attributes.position.array, q = new THREE.Vector3();
+      for (let i = 0; i < N; i++) { curve.getPoint(i / (N - 1), q); arr[i * 3] = q.x; arr[i * 3 + 1] = q.y; arr[i * 3 + 2] = q.z; }
+      cordGeo.attributes.position.needsUpdate = true;
+      const fadeUp = Math.max(0, 1 - (env.rig.position.y - 0.45) / 4.5);
+      cord.material.opacity = 0.5 * fadeUp;
+      pulses.forEach((s, i) => {
+        const u = (t * 0.22 + i / 3) % 1;
+        curve.getPoint(u, s.position);
+        s.material.opacity = 0.9 * fadeUp * Math.sin(u * Math.PI);
+      });
+      rings.forEach((r, i) => { r.rotation.z = t * (0.04 + i * 0.02) * (i % 2 ? -1 : 1); });
+      heartGlow.material.opacity = 0.4 + 0.2 * Math.sin(t * 2 * Math.PI * 0.9);
     },
   };
 }
@@ -114,12 +144,21 @@ export function oceanWorld() {
   const group = new THREE.Group();
   const sunDir = V3(0.0, 0.075, -1.0).normalize();
   const follow = [
-    skyDome({ top: 0x22184a, horizon: 0xff8a48, bottom: 0xff9a5a, sunDir, sunColor: 0xffe2a8, sunPower: 1600, glowPower: 6, glow: 0.65 }),
+    skyDome({ top: 0x1c1440, horizon: 0xff8a48, bottom: 0xff9a5a, sunDir, sunColor: 0xffe2a8, sunPower: 1600, glowPower: 16, glow: 0.6 }),
     stars({ count: 500, seed: 31, size: 1.6, opacity: 0.55, minY: 0.35 }),
   ];
   const sun = glowSprite(0xffd8a0, 70, 0.9);
   sun.position.copy(sunDir).multiplyScalar(420);
   follow.push(sun);
+  // soft sunset cloud banks low over the horizon
+  const rc = rng(91);
+  for (let i = 0; i < 9; i++) {
+    const az = (rc() - 0.5) * 2.2, el = 0.04 + rc() * 0.12;
+    const c = glowSprite([0xff9f7a, 0xffb48c, 0xc77aa6, 0xff8f6e][i % 4], 1, 0.28 + rc() * 0.3);
+    c.scale.set(150 + rc() * 120, 22 + rc() * 22, 1);
+    c.position.set(Math.sin(az), el, -Math.cos(az)).normalize().multiplyScalar(400);
+    follow.push(c);
+  }
   const mat = new THREE.ShaderMaterial({
     vertexShader: OCEAN_VS, fragmentShader: OCEAN_FS, toneMapped: false,
     uniforms: {
@@ -179,6 +218,17 @@ export function forestWorld() {
   group.add(trunks, lower, upper);
   const flies = drifters({ count: 1300, box: [-12, 12, 0.3, 5.0, 8, -70], color: 0xd2ff7a, size: 2.1, seed: 13 });
   group.add(flies);
+  // low moonlit mist drifting between the trees
+  const rm = rng(55);
+  for (let i = 0; i < 12; i++) {
+    const mist = new THREE.Mesh(new THREE.CircleGeometry(9 + rm() * 6, 40), new THREE.MeshBasicMaterial({
+      map: glowTexture(), color: 0x86a8e0, transparent: true, opacity: 0.12 + rm() * 0.1, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+    }));
+    mist.rotation.x = -Math.PI / 2;
+    mist.position.set((rm() - 0.5) * 18, 0.25 + rm() * 0.6, 6 - rm() * 70);
+    group.add(mist);
+  }
   return {
     name: 'forest', group, follow, fog: new THREE.FogExp2(0x0b1d30, 0.042), start: { pos: V3(0, 1.6, 0), yaw: 0 },
     drift: V3(0, 0, -0.7), update() {},

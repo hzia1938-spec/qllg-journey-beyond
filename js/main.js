@@ -6,6 +6,7 @@ import { AudioEngine } from './audio.js';
 import { Orb } from './orb.js';
 import { BUILDERS } from './worlds.js';
 import { COLORS, disposeTree } from './gfx.js';
+import { loadBody } from './body.js';
 
 const Q = new URLSearchParams(location.search);
 const SHOT = Q.get('shot');
@@ -501,6 +502,7 @@ function begin() {
 }
 
 async function boot() {
+  await loadBody('./assets/body.bin');
   if (SHOT) {
     document.getElementById('title').classList.add('hidden');
     fade.material.opacity = 0;
