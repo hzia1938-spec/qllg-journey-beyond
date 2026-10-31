@@ -1,0 +1,138 @@
+{
+ "intro_1": {
+  "text": "Welcome, traveler. I'm glad you're here.",
+  "dur": 3.392
+ },
+ "intro_2": {
+  "text": "Make yourself comfortable. Sit back, or lie down, and let your shoulders soften.",
+  "dur": 5.45
+ },
+ "intro_3": {
+  "text": "In front of you is a small light. It breathes slowly. Breathe with it.",
+  "dur": 6.936
+ },
+ "breath_in": {
+  "text": "Breathe in, slowly.",
+  "dur": 2.09
+ },
+ "breath_out": {
+  "text": "and let it go.",
+  "dur": 1.467
+ },
+ "intro_4": {
+  "text": "Good. With every breath, your body grows heavier and warmer, and your mind grows lighter.",
+  "dur": 6.739
+ },
+ "lift_1": {
+  "text": "Now imagine a second you, made of light, resting quietly inside your body.",
+  "dur": 5.438
+ },
+ "lift_2": {
+  "text": "It is weightless. It wants to rise.",
+  "dur": 3.186
+ },
+ "lift_3": {
+  "text": "Let it float upward, gently, the way a feather rises on warm air.",
+  "dur": 5.241
+ },
+ "lift_4": {
+  "text": "Below you, your body rests, safe and peaceful. You can return to it whenever you wish.",
+  "dur": 7.191
+ },
+ "lift_5": {
+  "text": "Now, let's go exploring.",
+  "dur": 2.013
+ },
+ "ocean_1": {
+  "text": "We are drifting above a quiet ocean at sunset. Feel how easily you move.",
+  "dur": 5.879
+ },
+ "ocean_2": {
+  "text": "Somewhere nearby is a golden light. It is the light of Truth. Look around for it, and when you find it, rest your eyes on it until it comes to you.",
+  "dur": 10.353
+ },
+ "ocean_hint": {
+  "text": "Look around slowly. The golden light is waiting for you.",
+  "dur": 4.199
+ },
+ "ocean_got": {
+  "text": "Truth. The light that sees clearly, without fear.",
+  "dur": 4.244
+ },
+ "forest_1": {
+  "text": "Now we drift into a forest at night, alive with fireflies.",
+  "dur": 4.147
+ },
+ "forest_2": {
+  "text": "Among them flies a bright green light, wild and free. It is the light of Freedom. Find it.",
+  "dur": 5.27
+ },
+ "forest_hint": {
+  "text": "Look between the trees. Freedom never stays still for long.",
+  "dur": 5.158
+ },
+ "forest_got": {
+  "text": "Freedom. The light that no one can cage.",
+  "dur": 3.017
+ },
+ "aurora_1": {
+  "text": "Higher now, above silent mountains, where the sky itself is dancing.",
+  "dur": 5.697
+ },
+ "aurora_2": {
+  "text": "In the dancing sky glows a warm, rose-coloured light. It is the light of Love. Find it.",
+  "dur": 7.543
+ },
+ "aurora_hint": {
+  "text": "Look up. Love is shining in the open sky.",
+  "dur": 3.368
+ },
+ "aurora_got": {
+  "text": "Love. The light that connects every living thing.",
+  "dur": 3.671
+ },
+ "earth_1": {
+  "text": "Now we rise beyond the sky, and there is our home, planet Earth, glowing in the dark.",
+  "dur": 5.912
+ },
+ "earth_2": {
+  "text": "One light remains, a bright violet light near the Earth. It is the light of individual Sovereignty, your right to choose your own path. Bring it home.",
+  "dur": 9.85
+ },
+ "earth_hint": {
+  "text": "The last light is close to the Earth. Look near its edge.",
+  "dur": 4.01
+ },
+ "earth_got": {
+  "text": "Sovereignty. The light that belongs to you alone.",
+  "dur": 3.945
+ },
+ "finale_1": {
+  "text": "Now watch. Truth, Freedom, Love and Sovereignty, together, surround the Earth.",
+  "dur": 5.441
+ },
+ "finale_2": {
+  "text": "This is what Pro-Life and Earth Avatars do. Each of us carries these four lights, and when enough of us shine together, the whole world can change its course.",
+  "dur": 10.092
+ },
+ "return_1": {
+  "text": "It is time to return. Slowly, gently, drift back toward your body.",
+  "dur": 5.712
+ },
+ "return_2": {
+  "text": "Feel your weight again. Your hands. Your feet. Your breath.",
+  "dur": 4.882
+ },
+ "return_3": {
+  "text": "Bring the four lights back with you. They are yours to keep.",
+  "dur": 3.76
+ },
+ "return_4": {
+  "text": "Take one more deep breath, and when you are ready, open your eyes.",
+  "dur": 4.946
+ },
+ "return_5": {
+  "text": "Thank you for traveling with me. I'll see you on the next journey.",
+  "dur": 3.707
+ }
+}

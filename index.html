@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#05070f">
+<title>Journey Beyond · QLLG Game 1</title>
+<meta name="description" content="Quantum Living & Learning Games, Game 1: a guided journey to gather the lights of Truth, Freedom, Love and Sovereignty. Plays on phones, computers and VR headsets.">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Journey Beyond · QLLG Game 1">
+<meta property="og:description" content="A guided journey to gather the lights of Truth, Freedom, Love and Sovereignty. Play on a phone, computer or VR headset.">
+<meta property="og:url" content="https://hzia1938-spec.github.io/qllg-journey-beyond/">
+<meta property="og:image" content="https://hzia1938-spec.github.io/qllg-journey-beyond/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://hzia1938-spec.github.io/qllg-journey-beyond/og-image.png">
+<style>
+  :root { --gold: #ffcc4d; --ink: #05070f; --soft: rgba(236, 240, 250, .82); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--ink); color: #fff; overflow: hidden;
+    font-family: Futura, "Avenir Next", "Century Gothic", "Trebuchet MS", sans-serif;
+    -webkit-tap-highlight-color: transparent; }
+  #stage { position: fixed; inset: 0; touch-action: none; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+    background: radial-gradient(ellipse at 50% 38%, rgba(30, 70, 160, .45), rgba(5, 7, 15, .96) 62%);
+    transition: opacity .9s ease; z-index: 10; }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+  .kicker { font-size: 12px; letter-spacing: .32em; color: var(--gold); text-transform: uppercase; }
+  h1 { font-size: clamp(40px, 10vw, 76px); margin: 14px 0 6px; font-weight: 700; letter-spacing: .01em; }
+  .sub { font-size: clamp(15px, 4vw, 19px); color: var(--soft); max-width: 30em; line-height: 1.45; margin: 0 0 26px; }
+  .orbs { display: flex; gap: 14px; justify-content: center; margin: 0 0 28px; }
+  .orbs span { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 16px 4px currentColor; background: currentColor; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  button { font: inherit; font-size: 17px; font-weight: 700; letter-spacing: .04em; border: 0; cursor: pointer;
+    padding: 15px 26px; border-radius: 999px; min-width: 210px; }
+  .primary { background: var(--gold); color: #1a1205; box-shadow: 0 0 28px rgba(255, 204, 77, .35); }
+  .ghost { background: rgba(255, 255, 255, .1); color: #fff; outline: 2px solid rgba(255, 255, 255, .35); }
+  button:disabled { opacity: .45; cursor: default; }
+  .tips { margin-top: 26px; font-size: 14px; color: rgba(236, 240, 250, .66); line-height: 1.7; max-width: 32em; }
+  .tips b { color: rgba(255, 255, 255, .9); font-weight: 700; }
+  #progress { margin-top: 18px; font-size: 13px; color: rgba(236, 240, 250, .55); min-height: 1.2em; }
+
+  #caption { position: fixed; left: 50%; bottom: calc(7vh + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    width: min(92vw, 760px); text-align: center; font-size: clamp(18px, 4.6vw, 28px); line-height: 1.32;
+    font-weight: 700; text-shadow: 0 2px 10px rgba(0, 0, 0, .85), 0 0 2px rgba(0, 0, 0, .9);
+    opacity: 0; transition: opacity .35s ease; pointer-events: none; z-index: 5; }
+  #caption.on { opacity: 1; }
+  #hint { position: fixed; top: calc(44px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    width: min(86vw, 520px); text-align: center; font-size: 13px; letter-spacing: .08em; line-height: 1.5;
+    color: rgba(255, 255, 255, .7); text-shadow: 0 1px 6px rgba(0, 0, 0, .8); z-index: 5; pointer-events: none;
+    transition: opacity .6s ease; }
+  #found { position: fixed; top: calc(14px + env(safe-area-inset-top)); right: 16px; display: flex; gap: 8px; z-index: 5; }
+  #found i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .35); }
+  #found i.lit { border-color: transparent; background: currentColor; box-shadow: 0 0 12px 3px currentColor; }
+  .end h1 { font-size: clamp(34px, 8vw, 60px); }
+  .end .url { font-size: clamp(26px, 7vw, 44px); color: var(--gold); font-weight: 700; margin: 6px 0 22px; letter-spacing: .02em; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./lib/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+
+<section id="title" class="screen">
+  <div class="kicker">Quantum Living &amp; Learning Games&trade; &middot; Game 1</div>
+  <h1>Journey Beyond</h1>
+  <p class="sub">A guided journey beyond the body to gather the four lights of
+    Truth, Freedom, Love and Sovereignty, and bring them home to the Earth.</p>
+  <div class="orbs">
+    <span style="color:#ffd35c"></span><span style="color:#5cffa0"></span>
+    <span style="color:#ff7aa8"></span><span style="color:#b98cff"></span>
+  </div>
+  <div class="buttons">
+    <button id="btn-vr" class="primary" hidden>Enter VR</button>
+    <button id="btn-play" class="primary" disabled>Loading&hellip;</button>
+  </div>
+  <div id="progress"></div>
+  <div class="tips">
+    <b>Headphones recommended.</b> Sit or lie somewhere comfortable; about 7 minutes.<br>
+    Look around by dragging (or move your head in VR). To gather a light,
+    <b>look at it</b> until it comes to you, or tap it.
+  </div>
+</section>
+
+<section id="end" class="screen end hidden">
+  <div class="kicker">Thank you for traveling</div>
+  <h1>The lights are yours to keep</h1>
+  <div class="url">QLLG.org</div>
+  <p class="sub">Pro-Life &amp; Earth Avatars &middot; Reality Alchemy by great grandpa Will Barkley</p>
+  <div class="buttons"><button id="btn-again" class="ghost">Journey again</button></div>
+</section>
+
+<div id="hint"></div>
+<div id="found" hidden><i style="color:#ffd35c"></i><i style="color:#5cffa0"></i><i style="color:#ff7aa8"></i><i style="color:#b98cff"></i></div>
+<div id="caption"></div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
